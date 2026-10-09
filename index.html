@@ -1,0 +1,607 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#0F2133">
+<meta name="description" content="Aponte a câmera para um preço em pesos e veja quanto custa em dólares ou reais, na cotação Visa usada pela Nomad.">
+<title>Quanto é</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icons/icon-192.png">
+<link rel="apple-touch-icon" href="./icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --navy:#0F2133;
+  --navy-2:#173048;
+  --celeste:#74ACDF;
+  --gold:#F6C445;
+  --gold-ink:#13263A;
+  --paper:#F5F7FA;
+  --muted:#A9BBCC;
+  --warn:#FF8A5B;
+  --glass:rgba(10,22,34,.58);
+  --num:"Barlow Condensed","Roboto Condensed","Arial Narrow",system-ui,sans-serif;
+  --ui:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --top:max(env(safe-area-inset-top),12px);
+  --bottom:max(env(safe-area-inset-bottom),16px);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:#000;color:var(--paper);font-family:var(--ui);overflow:hidden;overscroll-behavior:none;touch-action:manipulation;-webkit-user-select:none;user-select:none}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
+button:focus-visible,input:focus-visible,a:focus-visible{outline:2px solid var(--celeste);outline-offset:2px}
+
+#cam,#freeze{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;background:#000}
+#freeze[hidden]{display:none}
+
+/* Mira */
+.reticle{position:fixed;left:8vw;right:8vw;top:20vh;height:46vw;border-radius:14px;
+  box-shadow:0 0 0 200vmax rgba(5,12,20,.42);transition:box-shadow .25s,top .25s,height .25s,left .25s,right .25s;pointer-events:none}
+body.menu .reticle{left:4vw;right:4vw;top:calc(var(--top) + 92px);height:calc(100vh - var(--top) - 92px - 180px - var(--bottom));height:calc(100dvh - var(--top) - 92px - 180px - var(--bottom))}
+body.result .reticle,body.error .reticle{box-shadow:0 0 0 200vmax rgba(5,12,20,.66)}
+.c{position:absolute;width:30px;height:30px;border:4px solid var(--celeste)}
+.c.tl{top:-2px;left:-2px;border-right:0;border-bottom:0;border-top-left-radius:14px}
+.c.tr{top:-2px;right:-2px;border-left:0;border-bottom:0;border-top-right-radius:14px}
+.c.bl{bottom:-2px;left:-2px;border-right:0;border-top:0;border-bottom-left-radius:14px}
+.c.br{bottom:-2px;right:-2px;border-left:0;border-top:0;border-bottom-right-radius:14px}
+body.reading .c{animation:pulse 1s ease-in-out infinite alternate}
+@keyframes pulse{to{border-color:var(--gold);transform:scale(.9)}}
+.hint{position:absolute;left:0;right:0;top:calc(100% + 14px);text-align:center;font-size:15px;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.8)}
+body:not(.live) .hint{display:none}
+
+/* Topo */
+.top{position:fixed;left:14px;right:14px;top:var(--top);display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.seg{display:inline-flex;background:var(--glass);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-radius:999px;padding:4px}
+.seg button{min-width:64px;height:40px;border-radius:999px;font-family:var(--num);font-weight:700;font-size:20px;letter-spacing:.02em;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--gold);color:var(--gold-ink)}
+.rate{margin-top:8px;font-size:13px;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.9);line-height:1.35}
+.rate.stale{color:var(--warn)}
+.icons{display:flex;gap:8px}
+.ib{width:48px;height:48px;border-radius:50%;background:var(--glass);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);display:grid;place-items:center}
+.ib svg{width:24px;height:24px;stroke:#fff;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.ib[aria-pressed="true"]{background:var(--gold)}
+.ib[aria-pressed="true"] svg{stroke:var(--gold-ink)}
+.ib[hidden]{display:none}
+
+/* Controles */
+.controls{position:fixed;left:0;right:0;bottom:var(--bottom);display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:0 28px}
+.controls .ib{justify-self:center}
+.shutter{width:80px;height:80px;border-radius:50%;border:5px solid #fff;display:grid;place-items:center;background:rgba(255,255,255,.12)}
+.shutter span{width:58px;height:58px;border-radius:50%;background:#fff;transition:transform .15s,background .15s}
+.shutter:active span{transform:scale(.88)}
+body.reading .shutter span{background:transparent;border:5px solid var(--gold);border-right-color:transparent;animation:spin .8s linear infinite;width:46px;height:46px}
+body.result .shutter span,body.error .shutter span{background:var(--celeste)}
+@keyframes spin{to{transform:rotate(360deg)}}
+.lab{position:fixed;left:0;right:0;bottom:calc(var(--bottom) + 88px);text-align:center;font-size:13px;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.9);pointer-events:none}
+
+/* Resultados */
+.results{position:fixed;left:12px;right:12px;bottom:calc(var(--bottom) + 116px);max-height:46vh;overflow:auto;display:flex;flex-direction:column;gap:10px;padding:2px}
+.results:empty{display:none}
+.tag{position:relative;background:var(--gold);color:var(--gold-ink);padding:10px 16px 10px 40px;
+  clip-path:polygon(18px 0,100% 0,100% 100%,18px 100%,0 50%);
+  -webkit-mask:radial-gradient(circle 6px at 22px 50%,transparent 96%,#000 100%);mask:radial-gradient(circle 6px at 22px 50%,transparent 96%,#000 100%);
+  border-radius:0 10px 10px 0;animation:in .22s ease-out both}
+.tag:nth-child(2){animation-delay:.05s}.tag:nth-child(3){animation-delay:.1s}.tag:nth-child(4){animation-delay:.15s}
+@keyframes in{from{opacity:0;transform:translateY(8px)}}
+.tag-label{font-size:13px;font-weight:600;opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tag-main{font-family:var(--num);font-weight:800;font-size:44px;line-height:1;letter-spacing:.01em;margin:2px 0 3px}
+.tag-sub{font-family:var(--num);font-weight:500;font-size:19px;display:flex;flex-wrap:wrap;gap:4px 14px}
+.chip{display:inline-block;font-family:var(--ui);font-size:11px;font-weight:700;background:var(--gold-ink);color:var(--gold);border-radius:4px;padding:2px 6px;margin-left:6px;vertical-align:2px}
+.tag.minor .tag-main{font-size:32px}
+.msg{background:var(--navy);border-radius:12px;padding:14px 16px;font-size:15px;line-height:1.45}
+.msg b{display:block;font-size:16px;margin-bottom:2px}
+.msg button{margin-top:10px;background:var(--celeste);color:var(--navy);font-weight:700;border-radius:999px;padding:9px 16px}
+.note{font-size:13px;color:#fff;background:var(--glass);border-radius:10px;padding:8px 12px}
+
+/* Folhas */
+dialog{border:0;padding:0;margin:auto auto 0;width:100%;max-width:560px;max-height:92vh;background:var(--navy);color:var(--paper);border-radius:20px 20px 0 0;-webkit-user-select:text;user-select:text}
+dialog::backdrop{background:rgba(0,0,0,.55)}
+.sheet{padding:22px 20px calc(var(--bottom) + 16px);overflow:auto;max-height:92vh}
+.sheet h2{font-family:var(--num);font-weight:700;font-size:30px;margin:0 0 4px}
+.sheet h3{font-size:16px;margin:24px 0 8px}
+.sheet p,.sheet .help{font-size:14px;line-height:1.5;color:var(--muted);margin:6px 0}
+.sheet a{color:var(--celeste)}
+.field{display:flex;gap:8px;align-items:center;margin:8px 0}
+.field label{flex:1;font-size:15px}
+input[type=text],input[type=password],input[type=number],input[inputmode]{font:inherit;font-size:16px;color:var(--paper);background:var(--navy-2);border:1px solid #2C4A66;border-radius:10px;padding:11px 12px;width:100%;min-width:0}
+.field input{width:120px;flex:none;text-align:right}
+.opt{display:flex;gap:10px;align-items:flex-start;padding:12px;border:1px solid #2C4A66;border-radius:12px;margin:8px 0}
+.opt input[type=radio]{margin-top:3px;accent-color:var(--gold);width:18px;height:18px;flex:none}
+.opt .body{flex:1;min-width:0}
+.opt .t{font-size:15px;font-weight:600}
+.opt .v{font-family:var(--num);font-size:22px;font-weight:700;color:var(--gold);margin-top:2px}
+.btn{display:inline-block;background:var(--gold);color:var(--gold-ink);font-weight:700;border-radius:999px;padding:12px 20px;margin-top:10px}
+.btn.ghost{background:transparent;color:var(--celeste);border:1px solid var(--celeste)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.ok{color:#8FE3A8}.bad{color:var(--warn)}
+details{margin-top:10px}
+summary{color:var(--celeste);font-size:14px;cursor:pointer}
+.big{font-family:var(--num);font-size:38px;font-weight:700;text-align:right}
+#manualOut{margin-top:14px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body class="live">
+<video id="cam" playsinline muted autoplay></video>
+<canvas id="freeze" hidden></canvas>
+
+<div class="reticle" id="reticle" aria-hidden="true">
+  <i class="c tl"></i><i class="c tr"></i><i class="c bl"></i><i class="c br"></i>
+  <div class="hint" id="hint">Aponte para o preço e toque no botão</div>
+</div>
+
+<header class="top">
+  <div>
+    <div class="seg" role="group" aria-label="Converter para">
+      <button id="tUSD" aria-pressed="true">US$</button>
+      <button id="tBRL" aria-pressed="false">R$</button>
+    </div>
+    <div class="rate" id="rate">Carregando cotação…</div>
+  </div>
+  <div class="icons">
+    <button class="ib" id="torch" aria-label="Lanterna" aria-pressed="false" hidden>
+      <svg viewBox="0 0 24 24"><path d="M7 2h10v4l-3 4v12h-4V10L7 6z"/><path d="M12 13v3"/></svg>
+    </button>
+    <button class="ib" id="openSettings" aria-label="Configurações">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </button>
+  </div>
+</header>
+
+<div class="results" id="results" aria-live="polite"></div>
+<div class="lab" id="lab"></div>
+
+<nav class="controls">
+  <button class="ib" id="openManual" aria-label="Digitar um preço">
+    <svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h2M12 11h0M16 11h0M8 15h0M12 15h0M16 15h0M8 18h8"/></svg>
+  </button>
+  <button class="shutter" id="shutter" aria-label="Ler preço"><span></span></button>
+  <button class="ib" id="frame" aria-label="Mira para cardápio" aria-pressed="false">
+    <svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h5M8 10.5h8M8 14h6M8 17.5h8"/></svg>
+  </button>
+</nav>
+
+<dialog id="settings">
+  <div class="sheet">
+    <h2>Configurações</h2>
+
+    <h3>Chave da API</h3>
+    <p id="keyIntro">Para ler preços, cole sua chave da API da Anthropic. Ela fica salva só neste celular. Crie uma em <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a> e defina um limite de gasto.</p>
+    <input type="password" id="apiKey" autocomplete="off" spellcheck="false" placeholder="sk-ant-…">
+    <div class="row"><button class="btn ghost" id="testKey">Testar chave</button><span id="keyStatus" class="help"></span></div>
+
+    <h3>Peso para dólar</h3>
+    <label class="opt"><input type="radio" name="arsMode" value="visa">
+      <span class="body"><span class="t">Cotação Visa, a mesma da Nomad</span><div class="v" id="visaVal">…</div><div class="help" id="visaDate"></div></span></label>
+    <label class="opt"><input type="radio" name="arsMode" value="manual">
+      <span class="body"><span class="t">Manual (pesos por dólar)</span><input inputmode="decimal" id="arsManual" placeholder="1.450"></span></label>
+    <div class="field"><label for="arsAdjust">Custo extra da Nomad sobre a Visa (%)</label><input type="number" step="0.01" id="arsAdjust"></div>
+    <details>
+      <summary>Conferir com uma compra real</summary>
+      <p>Pegue uma compra recente no extrato da Nomad e digite o valor em pesos e quanto foi debitado em dólares.</p>
+      <div class="field"><label for="calArs">Valor em pesos</label><input inputmode="decimal" id="calArs" placeholder="15.000"></div>
+      <div class="field"><label for="calUsd">Debitado em US$</label><input inputmode="decimal" id="calUsd" placeholder="10,40"></div>
+      <p id="calOut"></p>
+      <button class="btn ghost" id="calApply" hidden>Usar este ajuste</button>
+    </details>
+
+    <h3>Dólar para real</h3>
+    <label class="opt"><input type="radio" name="brlMode" value="nomad">
+      <span class="body"><span class="t">Comercial + spread + IOF (estimativa Nomad)</span><div class="v" id="brlVal">…</div><div class="help" id="brlInfo"></div></span></label>
+    <div class="field"><label for="spread">Spread da Nomad (%)</label><input type="number" step="0.1" id="spread"></div>
+    <div class="field"><label for="iof">IOF (%)</label><input type="number" step="0.1" id="iof"></div>
+    <label class="opt"><input type="radio" name="brlMode" value="manual">
+      <span class="body"><span class="t">Manual (VET mostrado no app da Nomad)</span><input inputmode="decimal" id="brlManual" placeholder="5,90"></span></label>
+
+    <h3>Modelo</h3>
+    <input type="text" id="model" spellcheck="false" autocomplete="off">
+    <p class="help">Modelo do Claude usado na leitura. O padrão é rápido e barato.</p>
+
+    <button class="btn" id="closeSettings">Pronto</button>
+  </div>
+</dialog>
+
+<dialog id="manual">
+  <div class="sheet">
+    <h2>Digitar preço</h2>
+    <input inputmode="decimal" id="manualIn" class="big" placeholder="$ 0" autocomplete="off">
+    <div id="manualOut"></div>
+    <button class="btn" id="closeManual">Fechar</button>
+  </div>
+</dialog>
+
+<script>
+"use strict";
+/* ---------- Estado ---------- */
+const $ = id => document.getElementById(id);
+const store = {
+  get(k, d){ try{ const v = localStorage.getItem("qe." + k); return v == null ? d : JSON.parse(v); }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem("qe." + k, JSON.stringify(v)); }catch(e){} }
+};
+const DEFAULTS = { apiKey:"", model:"claude-haiku-5-5", target:"USD", arsMode:"visa", arsManual:null, arsAdjustPct:0,
+  brlMode:"nomad", spreadPct:2, iofPct:3.5, brlManual:null, frame:"tag" };
+const S = Object.assign({}, DEFAULTS, store.get("settings", {}));
+const save = () => store.set("settings", S);
+let R = store.get("rates", { visaArsPerUsd:null, visaDate:null, brlCommercial:null, brlTime:null, brlSource:null });
+
+/* ---------- Números ---------- */
+function parseNum(s){
+  s = String(s == null ? "" : s).trim().replace(/[^\d.,]/g, "");
+  if(!s) return NaN;
+  const c = s.lastIndexOf(","), d = s.lastIndexOf(".");
+  if(c > -1 && c > d) return parseFloat(s.replace(/\./g, "").replace(",", "."));
+  if(d > -1){
+    if(c > -1) return parseFloat(s.replace(/,/g, ""));            // 1,234.50 (formato americano)
+    const dots = (s.match(/\./g) || []).length;
+    const decs = s.length - d - 1;
+    if(dots === 1 && decs !== 3) return parseFloat(s);             // 12.5
+    return parseFloat(s.replace(/\./g, ""));                       // 12.500 ou 1.234.567
+  }
+  return parseFloat(s);
+}
+const nf = (loc, min, max) => new Intl.NumberFormat(loc, { minimumFractionDigits:min, maximumFractionDigits:max });
+const fUSD = n => "US$ " + nf("pt-BR", 2, 2).format(n);
+const fBRL = n => "R$ " + nf("pt-BR", 2, 2).format(n);
+const fARS = n => "$ " + (Number.isInteger(n) ? nf("es-AR", 0, 0) : nf("es-AR", 2, 2)).format(n);
+
+/* ---------- Cotações ---------- */
+function arsPerUsd(){
+  if(S.arsMode === "manual" && S.arsManual > 0) return S.arsManual;
+  if(!(R.visaArsPerUsd > 0)) return null;
+  return R.visaArsPerUsd / (1 + (Number(S.arsAdjustPct) || 0) / 100);
+}
+function brlPerUsd(){
+  if(S.brlMode === "manual" && S.brlManual > 0) return S.brlManual;
+  if(!(R.brlCommercial > 0)) return null;
+  return R.brlCommercial * (1 + (Number(S.spreadPct) || 0) / 100) * (1 + (Number(S.iofPct) || 0) / 100);
+}
+function convert(amount, currency){
+  const a = arsPerUsd(), b = brlPerUsd();
+  let usd = null;
+  if(currency === "USD") usd = amount;
+  else if(currency === "ARS" && a) usd = amount / a;
+  return { usd, brl: usd != null && b ? usd * b : null };
+}
+function daysOld(iso){
+  if(!iso) return Infinity;
+  const t = Date.parse(iso.length === 10 ? iso + "T12:00:00Z" : iso);
+  return (Date.now() - t) / 864e5;
+}
+const shortDate = iso => { if(!iso) return ""; const [y, m, d] = iso.slice(0, 10).split("-"); return d + "/" + m; };
+
+async function fetchJSON(url, ms){
+  const ac = new AbortController(); const t = setTimeout(() => ac.abort(), ms);
+  try{ const r = await fetch(url, { cache:"no-store", signal:ac.signal }); if(!r.ok) throw new Error(r.status); return await r.json(); }
+  finally{ clearTimeout(t); }
+}
+async function loadRates(){
+  try{
+    const j = await fetchJSON("./rates.json", 8000);
+    if(j.visa && j.visa.arsPerUsd > 0){ R.visaArsPerUsd = j.visa.arsPerUsd; R.visaDate = j.visa.date; }
+    if(j.brl && j.brl.commercial > 0){ R.brlCommercial = j.brl.commercial; R.brlTime = j.brl.time; R.brlSource = j.brl.source; }
+  }catch(e){}
+  try{
+    const j = await fetchJSON("https://economia.awesomeapi.com.br/json/last/USD-BRL", 5000);
+    const q = j && j.USDBRL; const ask = q && parseFloat(q.ask);
+    if(ask > 0){ R.brlCommercial = ask; R.brlTime = new Date(parseInt(q.timestamp, 10) * 1000).toISOString(); R.brlSource = "awesomeapi"; }
+  }catch(e){}
+  store.set("rates", R);
+  renderRates();
+}
+
+/* ---------- Interface ---------- */
+function setState(st){
+  document.body.classList.remove("live", "reading", "result", "error");
+  document.body.classList.add(st);
+  $("shutter").setAttribute("aria-label", st === "result" || st === "error" ? "Voltar para a câmera" : "Ler preço");
+  $("lab").textContent = st === "result" || st === "error" ? "Toque para ler outro" : "";
+}
+function renderRates(){
+  const el = $("rate");
+  const a = arsPerUsd(), b = brlPerUsd();
+  const stale = S.arsMode === "visa" && daysOld(R.visaDate) > 3;
+  if(S.target === "USD"){
+    el.textContent = a ? "US$ 1 = $ " + nf("es-AR", 0, 2).format(a) + (S.arsMode === "visa" ? " (Visa, " + shortDate(R.visaDate) + ")" : " (manual)") : "Sem cotação do peso";
+  }else{
+    el.textContent = a && b ? "R$ 1 = $ " + nf("es-AR", 0, 2).format(a / b) + " (US$ 1 = R$ " + nf("pt-BR", 2, 2).format(b) + ")" : "Sem cotação do real";
+  }
+  el.classList.toggle("stale", stale || !a);
+  if(stale) el.textContent += " desatualizada";
+  $("tUSD").setAttribute("aria-pressed", S.target === "USD");
+  $("tBRL").setAttribute("aria-pressed", S.target === "BRL");
+  // folha de configurações
+  $("visaVal").textContent = R.visaArsPerUsd ? "$ " + nf("es-AR", 2, 2).format(R.visaArsPerUsd) + " por US$" : "indisponível";
+  $("visaDate").textContent = R.visaDate ? "Taxa Visa de " + R.visaDate.split("-").reverse().join("/") + (S.arsAdjustPct ? "; com ajuste: $ " + nf("es-AR", 2, 2).format(R.visaArsPerUsd / (1 + S.arsAdjustPct / 100)) : "") : "";
+  const est = R.brlCommercial ? R.brlCommercial * (1 + S.spreadPct / 100) * (1 + S.iofPct / 100) : null;
+  $("brlVal").textContent = est ? "R$ " + nf("pt-BR", 4, 4).format(est) + " por US$" : "indisponível";
+  $("brlInfo").textContent = R.brlCommercial ? "Comercial R$ " + nf("pt-BR", 4, 4).format(R.brlCommercial) + (R.brlTime ? " em " + new Date(R.brlTime).toLocaleString("pt-BR", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" }) : "") : "";
+}
+const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, ch => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[ch]));
+function tagHTML(p){
+  const c = convert(p.amount, p.currency);
+  let mainTxt, parts = [];
+  if(p.currency === "OTHER"){
+    mainTxt = esc(p.raw || p.amount); parts.push("moeda não convertida");
+  }else{
+    const main = S.target === "USD" ? c.usd : c.brl;
+    mainTxt = main == null ? "sem cotação" : (S.target === "USD" ? fUSD(main) : fBRL(main));
+    if(p.currency === "USD") parts.push("preço em dólar no cartaz");
+    else parts.push(fARS(p.amount));
+    if(S.target === "USD" && c.brl != null) parts.push(fBRL(c.brl));
+    if(S.target === "BRL" && c.usd != null) parts.push(fUSD(c.usd));
+  }
+  const chip = p.kind === "unit" ? '<span class="chip">por kg/l/un.</span>' : p.kind === "promo" ? '<span class="chip">promoção</span>' : "";
+  const label = esc(p.label);
+  return '<div class="tag' + (p.kind === "unit" || p.kind === "other" ? " minor" : "") + '">' +
+    (label || chip ? '<div class="tag-label">' + label + chip + "</div>" : "") +
+    '<div class="tag-main">' + mainTxt + "</div>" +
+    '<div class="tag-sub">' + parts.map(x => "<span>" + x + "</span>").join("") + "</div></div>";
+}
+let lastPrices = null, lastNote = null;
+function renderResults(){
+  const box = $("results");
+  if(!lastPrices){ box.innerHTML = ""; return; }
+  if(!lastPrices.length){
+    box.innerHTML = '<div class="msg"><b>Nenhum preço encontrado</b>' + (lastNote ? escText(lastNote) : "Aproxime a câmera do preço e tente de novo.") + "</div>";
+    return;
+  }
+  box.innerHTML = lastPrices.map(tagHTML).join("") + (lastNote ? '<div class="note">' + escText(lastNote) + "</div>" : "");
+}
+const escText = s => String(s).replace(/[&<>]/g, ch => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;" }[ch]));
+function showMessage(title, text, actionLabel, action){
+  const box = $("results");
+  box.innerHTML = '<div class="msg"><b>' + escText(title) + "</b>" + escText(text) + (actionLabel ? '<br><button id="msgAction">' + escText(actionLabel) + "</button>" : "") + "</div>";
+  if(actionLabel) $("msgAction").onclick = action;
+}
+
+/* ---------- Câmera ---------- */
+const video = $("cam");
+let stream = null, track = null, torchOn = false;
+async function startCamera(){
+  if(stream) return;
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    setState("error"); showMessage("Câmera indisponível", "Abra o app pelo endereço https para usar a câmera."); return;
+  }
+  try{
+    stream = await navigator.mediaDevices.getUserMedia({ audio:false, video:{ facingMode:{ ideal:"environment" }, width:{ ideal:1920 }, height:{ ideal:1080 } } });
+    track = stream.getVideoTracks()[0];
+    video.srcObject = stream;
+    await video.play().catch(() => {});
+    const caps = track.getCapabilities ? track.getCapabilities() : {};
+    $("torch").hidden = !caps.torch;
+    if(caps.focusMode && caps.focusMode.includes("continuous")) track.applyConstraints({ advanced:[{ focusMode:"continuous" }] }).catch(() => {});
+    if(document.body.classList.contains("error")){ $("results").innerHTML = ""; setState("live"); }
+  }catch(e){
+    stream = null;
+    setState("error");
+    if(e.name === "NotAllowedError") showMessage("Câmera bloqueada", "Permita o acesso à câmera para ler preços. Se não aparecer o pedido, libere em Configurações do Android > Apps.", "Permitir câmera", () => startCamera());
+    else if(e.name === "NotFoundError") showMessage("Nenhuma câmera encontrada", "Use o botão de digitar para converter um valor.");
+    else showMessage("A câmera não abriu", e.message || String(e), "Tentar de novo", () => startCamera());
+  }
+}
+function stopCamera(){
+  if(stream){ stream.getTracks().forEach(t => t.stop()); }
+  stream = null; track = null; torchOn = false; $("torch").setAttribute("aria-pressed", "false");
+}
+document.addEventListener("visibilitychange", () => { if(document.hidden) stopCamera(); else if(!document.body.classList.contains("result")) startCamera(); });
+
+/* Converte a mira (tela) em um recorte do vídeo, considerando object-fit: cover */
+function cropRect(vw, vh, ew, eh, r, margin){
+  const scale = Math.max(ew / vw, eh / vh);
+  const ox = (ew - vw * scale) / 2, oy = (eh - vh * scale) / 2;
+  const mx = r.width * margin, my = r.height * margin;
+  let x = (r.left - mx - ox) / scale, y = (r.top - my - oy) / scale;
+  let w = (r.width + 2 * mx) / scale, h = (r.height + 2 * my) / scale;
+  const x2 = Math.min(vw, x + w), y2 = Math.min(vh, y + h);
+  x = Math.max(0, x); y = Math.max(0, y);
+  return { x, y, w:Math.max(1, x2 - x), h:Math.max(1, y2 - y) };
+}
+function captureJPEG(){
+  const vw = video.videoWidth, vh = video.videoHeight;
+  if(!vw || !vh) return null;
+  const r = $("reticle").getBoundingClientRect();
+  const c = cropRect(vw, vh, innerWidth, innerHeight, r, 0.06);
+  const k = Math.min(1, 1280 / Math.max(c.w, c.h));
+  const cv = document.createElement("canvas");
+  cv.width = Math.round(c.w * k); cv.height = Math.round(c.h * k);
+  cv.getContext("2d").drawImage(video, c.x, c.y, c.w, c.h, 0, 0, cv.width, cv.height);
+  return cv.toDataURL("image/jpeg", 0.85).split(",")[1];
+}
+
+/* ---------- Leitura com o Claude ---------- */
+const SYSTEM = [
+  "You read price tags, shelf labels, menus and receipts photographed in Argentina and report the prices with the report_prices tool.",
+  "Conventions: '$' alone means Argentine pesos (ARS). Argentina uses '.' as thousands separator and ',' as decimal separator: '$ 12.500' = 12500 and '$1.234,50' = 1234.5. Prices may also show cents as small raised digits: '$ 2.499⁹⁹' = 2499.99. 'US$', 'U$S', 'USD' and 'u$d' mean US dollars.",
+  "Argentine tags often also print a smaller 'Precio sin impuestos nacionales' (price without national taxes). Never report that figure; report the final price the customer pays.",
+  "kind: 'final' for the regular price to pay; 'promo' for promotional prices (2x1, 2da unidad al 70%, oferta, card or bank discounts), with the condition in label; 'unit' for reference prices per kg, litre or unit of measure; 'other' for anything else.",
+  "Order the list by prominence, most prominent first, at most 8 items. For menus, put the dish name in label. Labels are short, in the original language.",
+  "Ignore numbers that are not prices: weights, volumes, dates, codes, barcodes, phone numbers, quantities.",
+  "If you cannot read any price, return an empty list and explain briefly in note, in Brazilian Portuguese (for example: imagem desfocada, preço cortado). Otherwise note is an empty string unless something important is ambiguous."
+].join("\n");
+const TOOL = {
+  name:"report_prices",
+  description:"Report the prices visible in the photo.",
+  input_schema:{
+    type:"object",
+    properties:{
+      prices:{ type:"array", items:{ type:"object", properties:{
+        amount:{ type:"number", description:"Numeric value, for example 12500 or 1234.5" },
+        currency:{ type:"string", enum:["ARS", "USD", "OTHER"] },
+        label:{ type:"string", description:"Short product, dish or promo description; empty string if none" },
+        kind:{ type:"string", enum:["final", "promo", "unit", "other"] },
+        raw:{ type:"string", description:"The price text as printed" }
+      }, required:["amount", "currency", "kind", "raw"] } },
+      note:{ type:"string" }
+    },
+    required:["prices"]
+  }
+};
+async function callClaude(body, ms){
+  const ac = new AbortController(); const t = setTimeout(() => ac.abort(), ms);
+  try{
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+      method:"POST", signal:ac.signal,
+      headers:{ "content-type":"application/json", "x-api-key":S.apiKey.trim(), "anthropic-version":"2023-06-01", "anthropic-dangerous-direct-browser-access":"true" },
+      body:JSON.stringify(body)
+    });
+    const j = await r.json().catch(() => ({}));
+    if(!r.ok){ const e = new Error((j.error && j.error.message) || ("HTTP " + r.status)); e.status = r.status; e.type = j.error && j.error.type; throw e; }
+    return j;
+  }finally{ clearTimeout(t); }
+}
+function parseToolResult(j){
+  const b = (j.content || []).find(x => x.type === "tool_use" && x.name === "report_prices");
+  if(!b || !b.input) return { prices:[], note:"Resposta inesperada do modelo." };
+  const prices = (Array.isArray(b.input.prices) ? b.input.prices : [])
+    .map(p => ({ amount:typeof p.amount === "number" ? p.amount : parseNum(p.amount), currency:p.currency || "ARS", label:p.label || "", kind:p.kind || "final", raw:p.raw || "" }))
+    .filter(p => isFinite(p.amount) && p.amount > 0);
+  return { prices, note:(b.input.note || "").trim() || null };
+}
+function errorText(e){
+  if(e.name === "AbortError") return ["Demorou demais", "A conexão está lenta. Tente de novo."];
+  if(e.status === 401) return ["Chave inválida", "Confira a chave da API nas configurações."];
+  if(e.status === 403) return ["Chave sem permissão", e.message];
+  if(e.status === 404 || (e.status === 400 && /model/i.test(e.message))) return ["Modelo não encontrado", "Troque o modelo nas configurações. " + e.message];
+  if(e.status === 429) return ["Limite de uso atingido", "Espere um pouco ou confira os limites da sua conta."];
+  if(e.status === 529 || e.status >= 500) return ["Serviço sobrecarregado", "Tente de novo em alguns segundos."];
+  if(e.status === 400 && /credit|billing/i.test(e.message)) return ["Sem créditos na conta", e.message];
+  if(!navigator.onLine || e instanceof TypeError) return ["Sem internet", "A leitura precisa de conexão. O botão de digitar funciona offline."];
+  return ["Não deu para ler", e.message || String(e)];
+}
+let busy = false;
+async function read(){
+  if(busy) return;
+  if(!S.apiKey){ openSettings(true); return; }
+  const img = captureJPEG();
+  if(!img){ startCamera(); return; }
+  busy = true;
+  navigator.vibrate && navigator.vibrate(12);
+  const fz = $("freeze");
+  fz.width = video.videoWidth; fz.height = video.videoHeight;
+  fz.getContext("2d").drawImage(video, 0, 0);
+  fz.hidden = false;
+  setState("reading");
+  $("results").innerHTML = "";
+  try{
+    const j = await callClaude({
+      model:S.model || DEFAULTS.model, max_tokens:700, temperature:0, system:SYSTEM,
+      tools:[TOOL], tool_choice:{ type:"tool", name:"report_prices" },
+      messages:[{ role:"user", content:[
+        { type:"image", source:{ type:"base64", media_type:"image/jpeg", data:img } },
+        { type:"text", text:"Leia os preços desta imagem." }
+      ] }]
+    }, 30000);
+    const res = parseToolResult(j);
+    lastPrices = res.prices; lastNote = res.note;
+    setState("result"); renderResults();
+    navigator.vibrate && navigator.vibrate([10, 40, 10]);
+  }catch(e){
+    const [t, m] = errorText(e);
+    setState("error"); showMessage(t, m, e.status === 401 ? "Abrir configurações" : null, () => openSettings(true));
+  }finally{ busy = false; }
+}
+function backToLive(){
+  lastPrices = null; lastNote = null; $("results").innerHTML = "";
+  $("freeze").hidden = true;
+  setState("live");
+  if(stream) video.play().catch(() => {}); else startCamera();
+}
+
+/* ---------- Eventos ---------- */
+$("shutter").onclick = () => {
+  const b = document.body.classList;
+  if(b.contains("reading")) return;
+  if(b.contains("result") || b.contains("error")) backToLive(); else read();
+};
+$("tUSD").onclick = () => { S.target = "USD"; save(); renderRates(); renderResults(); renderManual(); };
+$("tBRL").onclick = () => { S.target = "BRL"; save(); renderRates(); renderResults(); renderManual(); };
+$("frame").onclick = () => { S.frame = S.frame === "menu" ? "tag" : "menu"; save(); applyFrame(); };
+function applyFrame(){
+  document.body.classList.toggle("menu", S.frame === "menu");
+  $("frame").setAttribute("aria-pressed", S.frame === "menu");
+  $("frame").setAttribute("aria-label", S.frame === "menu" ? "Mira para etiqueta" : "Mira para cardápio");
+  $("hint").textContent = S.frame === "menu" ? "Enquadre o cardápio e toque no botão" : "Aponte para o preço e toque no botão";
+}
+$("torch").onclick = async () => {
+  if(!track) return;
+  torchOn = !torchOn;
+  try{ await track.applyConstraints({ advanced:[{ torch:torchOn }] }); }catch(e){ torchOn = false; }
+  $("torch").setAttribute("aria-pressed", torchOn);
+};
+
+/* Configurações */
+function openSettings(focusKey){
+  fillSettings(); $("settings").showModal();
+  if(focusKey && !S.apiKey) setTimeout(() => $("apiKey").focus(), 50);
+}
+function fillSettings(){
+  $("apiKey").value = S.apiKey;
+  $("model").value = S.model;
+  document.querySelectorAll('[name=arsMode]').forEach(r => r.checked = r.value === S.arsMode);
+  document.querySelectorAll('[name=brlMode]').forEach(r => r.checked = r.value === S.brlMode);
+  $("arsManual").value = S.arsManual ? nf("es-AR", 0, 4).format(S.arsManual) : "";
+  $("brlManual").value = S.brlManual ? nf("pt-BR", 2, 4).format(S.brlManual) : "";
+  $("arsAdjust").value = S.arsAdjustPct;
+  $("spread").value = S.spreadPct; $("iof").value = S.iofPct;
+  $("keyIntro").hidden = !!S.apiKey;
+  renderRates();
+}
+$("openSettings").onclick = () => openSettings(false);
+$("closeSettings").onclick = () => $("settings").close();
+$("settings").addEventListener("close", () => { renderRates(); renderResults(); });
+$("apiKey").oninput = e => { S.apiKey = e.target.value.trim(); save(); $("keyStatus").textContent = ""; };
+$("model").oninput = e => { S.model = e.target.value.trim() || DEFAULTS.model; save(); };
+document.querySelectorAll('[name=arsMode]').forEach(r => r.onchange = () => { S.arsMode = r.value; save(); renderRates(); });
+document.querySelectorAll('[name=brlMode]').forEach(r => r.onchange = () => { S.brlMode = r.value; save(); renderRates(); });
+$("arsManual").oninput = e => { const v = parseNum(e.target.value); S.arsManual = v > 0 ? v : null; if(v > 0){ S.arsMode = "manual"; document.querySelector('[name=arsMode][value=manual]').checked = true; } save(); renderRates(); };
+$("brlManual").oninput = e => { const v = parseNum(e.target.value); S.brlManual = v > 0 ? v : null; if(v > 0){ S.brlMode = "manual"; document.querySelector('[name=brlMode][value=manual]').checked = true; } save(); renderRates(); };
+$("arsAdjust").oninput = e => { const v = parseFloat(String(e.target.value).replace(",", ".")); S.arsAdjustPct = isFinite(v) ? v : 0; save(); renderRates(); };
+$("spread").oninput = e => { const v = parseFloat(String(e.target.value).replace(",", ".")); S.spreadPct = isFinite(v) ? v : 0; save(); renderRates(); };
+$("iof").oninput = e => { const v = parseFloat(String(e.target.value).replace(",", ".")); S.iofPct = isFinite(v) ? v : 0; save(); renderRates(); };
+$("testKey").onclick = async () => {
+  const st = $("keyStatus");
+  if(!S.apiKey){ st.className = "help bad"; st.textContent = "Cole a chave primeiro."; return; }
+  st.className = "help"; st.textContent = "Testando…";
+  try{
+    await callClaude({ model:S.model || DEFAULTS.model, max_tokens:1, messages:[{ role:"user", content:"ok" }] }, 15000);
+    st.className = "help ok"; st.textContent = "Chave funcionando.";
+  }catch(e){ st.className = "help bad"; st.textContent = errorText(e).join(": "); }
+};
+function calc(){
+  const ars = parseNum($("calArs").value), usd = parseNum($("calUsd").value);
+  const out = $("calOut"), btn = $("calApply");
+  if(!(ars > 0 && usd > 0)){ out.textContent = ""; btn.hidden = true; return null; }
+  const eff = ars / usd;
+  let txt = "A Nomad usou $ " + nf("es-AR", 2, 2).format(eff) + " por US$.";
+  let adj = null;
+  if(R.visaArsPerUsd){
+    adj = (R.visaArsPerUsd / eff - 1) * 100;
+    txt += " A Visa de " + shortDate(R.visaDate) + " está em $ " + nf("es-AR", 2, 2).format(R.visaArsPerUsd) + ": diferença de " + nf("pt-BR", 2, 2).format(adj) + "%. Se a compra for de outro dia, a diferença pode ser só a variação do câmbio.";
+  }
+  out.textContent = txt; btn.hidden = adj == null; return adj;
+}
+$("calArs").oninput = calc; $("calUsd").oninput = calc;
+$("calApply").onclick = () => { const adj = calc(); if(adj == null) return; S.arsAdjustPct = Math.round(adj * 100) / 100; S.arsMode = "visa"; save(); fillSettings(); };
+
+/* Digitar */
+function renderManual(){
+  const v = parseNum($("manualIn").value);
+  $("manualOut").innerHTML = v > 0 ? tagHTML({ amount:v, currency:"ARS", kind:"final", label:"", raw:"" }) : "";
+}
+$("openManual").onclick = () => { $("manual").showModal(); setTimeout(() => $("manualIn").focus(), 50); };
+$("closeManual").onclick = () => $("manual").close();
+$("manualIn").oninput = renderManual;
+
+/* ---------- Início ---------- */
+window.QE = { parseNum, convert, cropRect, parseToolResult, arsPerUsd, brlPerUsd, S, R, renderRates, renderResults, setResults:(p, n) => { lastPrices = p; lastNote = n; setState("result"); renderResults(); } };
+applyFrame();
+renderRates();
+loadRates();
+startCamera();
+if(!S.apiKey) setTimeout(() => openSettings(true), 400);
+if("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(() => {});
+</script>
+</body>
+</html>

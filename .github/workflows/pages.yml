@@ -1,0 +1,46 @@
+name: Publicar app e cotações
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    # Uma vez por dia, 08:47 em Buenos Aires (11:47 UTC); a Visa publica a taxa do dia na virada da madrugada.
+    - cron: "47 11 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Montar o site
+        run: |
+          mkdir -p _site
+          cp -r index.html manifest.webmanifest sw.js icons _site/
+
+      - name: Buscar cotações (Visa e real comercial)
+        env:
+          PAGES_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+        run: python3 scripts/update_rates.py _site/rates.json && cat _site/rates.json
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

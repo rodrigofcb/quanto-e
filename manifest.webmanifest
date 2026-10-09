@@ -1,0 +1,18 @@
+{
+  "name": "Quanto é",
+  "short_name": "Quanto é",
+  "description": "Aponte a câmera para um preço em pesos e veja quanto custa em dólares ou reais.",
+  "lang": "pt-BR",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0F2133",
+  "theme_color": "#0F2133",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
