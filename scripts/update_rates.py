@@ -104,6 +104,11 @@ def main():
     }
     log("visa:", "nova" if visa else "anterior", data["visa"])
     log("brl:", "nova" if brl else "anterior", data["brl"])
+    if os.environ.get("GITHUB_ACTIONS"):
+        # Anotações visíveis no resumo da execução do workflow
+        level = "notice" if visa else "warning"
+        print(f"::{level} title=Visa ({'nova' if visa else 'anterior'})::{json.dumps(data['visa'])}")
+        print(f"::{'notice' if brl else 'warning'} title=Real ({'nova' if brl else 'anterior'})::{json.dumps(data['brl'])}")
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
     with open(out, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
