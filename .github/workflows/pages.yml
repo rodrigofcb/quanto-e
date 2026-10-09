@@ -31,6 +31,9 @@ jobs:
           mkdir -p _site
           cp -r index.html manifest.webmanifest sw.js icons _site/
 
+      - name: Preparar Python
+        run: pip install --quiet curl_cffi
+
       - name: Buscar cotações (Visa e real comercial)
         env:
           PAGES_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/

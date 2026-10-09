@@ -20,6 +20,7 @@ UA = ("Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36")
 UTC = dt.timezone.utc
 HERE = os.path.dirname(os.path.abspath(__file__))
+ERRORS = []
 
 
 def log(*a):
@@ -35,30 +36,60 @@ def get_json(url, headers=None, timeout=20):
 
 
 def visa_ars():
-    """Pesos por dólar na taxa Visa. Tenta hoje e volta até 6 dias."""
+    """Pesos por dólar na taxa Visa. Tenta hoje e volta até 6 dias, em mais de um site da Visa.
+
+    O site da Visa fica atrás de um filtro anti-robô; curl_cffi imita o navegador Chrome
+    (inclusive na conexão TLS) e passa primeiro pela página da calculadora para obter os cookies.
+    """
+    try:
+        from curl_cffi import requests as creq
+    except ImportError:
+        creq = None
+        ERRORS.append("curl_cffi ausente")
     today = dt.datetime.now(UTC).date()
-    referer = "https://usa.visa.com/support/consumer/travel-support/exchange-rate-calculator.html"
-    for back in range(0, 7):
-        d = today - dt.timedelta(days=back)
-        ds = d.strftime("%m/%d/%Y")
-        q = urllib.parse.urlencode({
-            "amount": "1", "fee": "0", "utcConvertedDate": ds, "exchangedate": ds,
-            "fromCurr": "USD", "toCurr": "ARS",
-        })
-        try:
-            j = get_json("https://usa.visa.com/cmsapi/fx/rates?" + q, {"Referer": referer})
-            ov = j.get("originalValues") or {}
-            # fromCurr = moeda do cartão (USD), toCurr = moeda da compra (ARS);
-            # fxRateVisa vem em dólares por peso.
-            fx = float(ov.get("fxRateVisa") or 0)
-            if fx > 0:
-                as_of = ov.get("asOfDate")
-                date = dt.datetime.fromtimestamp(int(as_of), UTC).date().isoformat() if as_of else d.isoformat()
-                return {"arsPerUsd": round(1 / fx, 4), "date": date,
-                        "fetched": dt.datetime.now(UTC).isoformat(timespec="seconds"), "source": "visa"}
-            log("visa", ds, "sem taxa:", str(j)[:200])
-        except Exception as e:  # noqa: BLE001
-            log("visa", ds, "falhou:", repr(e)[:200])
+    hosts = [
+        ("usa.visa.com", "/support/consumer/travel-support/exchange-rate-calculator.html"),
+        ("www.visa.com.br", "/suporte/consumidor/viajantes/calculadora-de-cambio.html"),
+        ("www.visa.co.uk", "/support/consumer/travel-support/exchange-rate-calculator.html"),
+    ]
+    for host, page in hosts:
+        sess = creq.Session(impersonate="chrome") if creq else None
+        if sess:
+            try:
+                sess.get("https://" + host + page, timeout=20)
+            except Exception as e:  # noqa: BLE001
+                ERRORS.append(f"{host} página: {repr(e)[:80]}")
+        for back in range(0, 7):
+            d = today - dt.timedelta(days=back)
+            ds = d.strftime("%m/%d/%Y")
+            q = urllib.parse.urlencode({
+                "amount": "1", "fee": "0", "utcConvertedDate": ds, "exchangedate": ds,
+                "fromCurr": "USD", "toCurr": "ARS",
+            })
+            url = "https://" + host + "/cmsapi/fx/rates?" + q
+            hdr = {"Referer": "https://" + host + page, "Accept": "application/json, text/plain, */*"}
+            try:
+                if sess:
+                    r = sess.get(url, headers=hdr, timeout=20)
+                    if r.status_code != 200:
+                        raise RuntimeError(f"HTTP {r.status_code}")
+                    j = r.json()
+                else:
+                    j = get_json(url, hdr)
+                ov = j.get("originalValues") or {}
+                # fromCurr = moeda do cartão (USD), toCurr = moeda da compra (ARS);
+                # fxRateVisa vem em dólares por peso.
+                fx = float(ov.get("fxRateVisa") or 0)
+                if fx > 0:
+                    as_of = ov.get("asOfDate")
+                    date = dt.datetime.fromtimestamp(int(as_of), UTC).date().isoformat() if as_of else d.isoformat()
+                    return {"arsPerUsd": round(1 / fx, 4), "date": date,
+                            "fetched": dt.datetime.now(UTC).isoformat(timespec="seconds"), "source": "visa (" + host + ")"}
+                ERRORS.append(f"{host} {ds}: sem taxa")
+            except Exception as e:  # noqa: BLE001
+                ERRORS.append(f"{host} {ds}: {repr(e)[:80]}")
+                if "HTTP 403" in repr(e) or "HTTP 429" in repr(e):
+                    break  # bloqueado neste site; tenta o próximo
     return None
 
 
@@ -109,6 +140,8 @@ def main():
         level = "notice" if visa else "warning"
         print(f"::{level} title=Visa ({'nova' if visa else 'anterior'})::{json.dumps(data['visa'])}")
         print(f"::{'notice' if brl else 'warning'} title=Real ({'nova' if brl else 'anterior'})::{json.dumps(data['brl'])}")
+        if ERRORS and not visa:
+            print("::warning title=Erros Visa::" + " | ".join(ERRORS)[:900])
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
     with open(out, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
