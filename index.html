@@ -463,11 +463,12 @@ function errorText(e){
   if(e.name === "AbortError") return ["Demorou demais", "A conexão está lenta. Tente de novo."];
   if(e.status === 401) return ["Chave inválida", "Confira a chave da API nas configurações."];
   if(e.status === 403) return ["Chave sem permissão", e.message];
-  if(e.status === 404 || (e.status === 400 && /model/i.test(e.message))) return ["Modelo não encontrado", "Troque o modelo nas configurações. " + e.message];
+  if(e.status === 404 || e.type === "not_found_error" || (e.status === 400 && /model/i.test(e.message) && /not found|does not exist|invalid model|unknown model/i.test(e.message))) return ["Modelo não encontrado", "Troque o modelo nas configurações. " + e.message];
   if(e.status === 429) return ["Limite de uso atingido", "Espere um pouco ou confira os limites da sua conta."];
   if(e.status === 529 || e.status >= 500) return ["Serviço sobrecarregado", "Tente de novo em alguns segundos."];
   if(e.status === 400 && /credit|billing/i.test(e.message)) return ["Sem créditos na conta", e.message];
   if(!navigator.onLine || e instanceof TypeError) return ["Sem internet", "A leitura precisa de conexão. O botão de digitar funciona offline."];
+  if(e.status === 400) return ["A API recusou o pedido", e.message];
   return ["Não deu para ler", e.message || String(e)];
 }
 let busy = false;
@@ -486,7 +487,7 @@ async function read(){
   $("results").innerHTML = "";
   try{
     const j = await callClaude({
-      model:S.model || DEFAULTS.model, max_tokens:700, temperature:0, system:SYSTEM,
+      model:S.model || DEFAULTS.model, max_tokens:700, system:SYSTEM,
       tools:[TOOL], tool_choice:{ type:"tool", name:"report_prices" },
       messages:[{ role:"user", content:[
         { type:"image", source:{ type:"base64", media_type:"image/jpeg", data:img } },

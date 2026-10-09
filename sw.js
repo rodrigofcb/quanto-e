@@ -1,7 +1,7 @@
 // Quanto é: service worker
 // HTML e cotações: rede primeiro (para receber atualizações), cache se estiver offline.
 // Ícones e fontes: cache primeiro. Chamadas à API do Claude nunca passam pelo cache.
-const VERSION = "qe-v1";
+const VERSION = "qe-v2";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/maskable-512.png"];
 
 self.addEventListener("install", e => {
