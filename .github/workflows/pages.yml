@@ -4,12 +4,15 @@ on:
   push:
     branches: [main]
   schedule:
-    # Uma vez por dia, 08:47 em Buenos Aires (11:47 UTC); a Visa publica a taxa do dia na virada da madrugada.
+    # A busca principal é às 08:47 em Buenos Aires (11:47 UTC). O GitHub às vezes atrasa ou pula
+    # execuções agendadas, então há mais duas de reserva no mesmo dia; cada uma só republica.
     - cron: "47 11 * * *"
+    - cron: "17 15 * * *"
+    - cron: "17 20 * * *"
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write  # para guardar a cotação nova no repositório (ver o último passo)
   pages: write
   id-token: write
 
@@ -47,3 +50,24 @@ jobs:
 
       - id: deployment
         uses: actions/deploy-pages@v4
+
+      # Guarda a cotação do dia no repositório quando a data da Visa avança. Serve de reserva se a
+      # Visa falhar e, por gerar atividade no repositório, impede o GitHub de desligar o agendamento
+      # (ele desliga em repositórios públicos sem atividade por 60 dias).
+      - name: Guardar a cotação do dia no repositório
+        if: github.event_name != 'push'
+        run: |
+          python3 - <<'PY'
+          import json
+          new = json.load(open("_site/rates.json", encoding="utf-8"))
+          seed = json.load(open("scripts/seed_rates.json", encoding="utf-8"))
+          if new.get("visa") and new["visa"].get("date", "") > (seed.get("visa") or {}).get("date", ""):
+              with open("scripts/seed_rates.json", "w", encoding="utf-8") as f:
+                  json.dump(new, f, ensure_ascii=False, indent=2)
+          PY
+          if ! git diff --quiet scripts/seed_rates.json; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -q -m "Cotação Visa de $(python3 -c 'import json;print(json.load(open("_site/rates.json"))["visa"]["date"])')" scripts/seed_rates.json
+            git push -q
+          fi
