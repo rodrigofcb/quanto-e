@@ -1,7 +1,7 @@
 // Quanto é: service worker
 // HTML e cotações: rede primeiro (para receber atualizações), cache se estiver offline.
 // Ícones e fontes: cache primeiro. Chamadas à API do Claude nunca passam pelo cache.
-const VERSION = "qe-v2";
+const VERSION = "qe-v3";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/maskable-512.png"];
 
 self.addEventListener("install", e => {
@@ -20,7 +20,7 @@ async function networkFirst(req){
   const cache = await caches.open(VERSION);
   try{
     const res = await fetch(req, { cache: "no-store" });
-    if(res.ok) cache.put(req, res.clone());
+    if(res.ok) cache.put(req.url.split("?")[0], res.clone()); // sem a query (?t=...), para não acumular cópias
     return res;
   }catch(err){
     const hit = await cache.match(req, { ignoreSearch: true });

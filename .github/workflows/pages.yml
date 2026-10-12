@@ -4,11 +4,12 @@ on:
   push:
     branches: [main]
   schedule:
-    # A busca principal é às 08:43 em Buenos Aires (11:43 UTC). O GitHub às vezes atrasa ou pula
-    # execuções agendadas, então há mais duas de reserva no mesmo dia; cada uma só republica.
-    - cron: "43 11 * * *"
-    - cron: "13 15 * * *"
-    - cron: "13 20 * * *"
+    # O GitHub tem atrasado as execuções agendadas de 3 a 5 horas, então elas são pedidas de madrugada
+    # (00:13, 06:13 e 10:13 em Buenos Aires) para a cotação nova chegar antes do dia começar.
+    # O botão de atualizar do app dispara este mesmo workflow na hora (workflow_dispatch).
+    - cron: "13 3 * * *"
+    - cron: "13 9 * * *"
+    - cron: "13 13 * * *"
   workflow_dispatch:
 
 permissions:
