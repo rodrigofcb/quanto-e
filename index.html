@@ -329,7 +329,7 @@ const GH = (() => {
   const repo = location.pathname.split("/").filter(Boolean)[0] || "quanto-e";
   return { api: "https://api.github.com/repos/" + owner + "/" + repo, workflow: "pages.yml" };
 })();
-const TIMING = { poll: 8000, limit: 5 * 60e3 };
+const TIMING = { poll: window.__qePoll || 8000, limit: 5 * 60e3 }; // __qePoll só nos testes
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const localToday = () => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
 const rateIsToday = () => !!R.visaDate && R.visaDate >= localToday();
@@ -351,17 +351,26 @@ function ghErrorText(status){
   if(status === 403 || status === 404) return "O token não tem permissão de Actions (Read and write) no quanto-e.";
   return "O GitHub recusou o pedido (" + status + "). Tente de novo mais tarde.";
 }
-async function refreshRates(){
+// Ao abrir o app (auto) ou no botão ↻: se a cotação publicada não for de hoje, pede uma busca nova ao GitHub.
+// Um pedido recente não é repetido: ao abrir, só depois de 20 min; no botão, depois de 3 min.
+const GAP = { auto: 20 * 60e3, manual: 3 * 60e3 };
+let lastCheck = 0;
+async function updateRates(auto){
   if(refreshing) return;
-  refreshing = true; $("refresh").classList.add("busy"); $("refresh").disabled = true;
+  refreshing = true; lastCheck = Date.now(); $("refresh").classList.add("busy"); $("refresh").disabled = true;
   try{
-    rateNote("Conferindo a cotação…");
-    await loadRates();                      // a busca agendada pode já ter rodado
-    if(rateIsToday()){ rateNote("A cotação já é a de hoje.", 3500); return; }
-    if(!S.ghToken){ rateNote(""); openSettings("gh"); return; }
+    if(!auto) rateNote("Conferindo a cotação…");
+    await loadRates();
+    if(rateIsToday()){ if(!auto) rateNote("A cotação já é a de hoje.", 3500); return; }
+    if(!S.ghToken){ rateNote(""); if(!auto) openSettings("gh"); return; }
     const before = R.updated || "", t0 = Date.now();
-    const r = await gh("/actions/workflows/" + GH.workflow + "/dispatches", "POST", { ref: "main" });
-    if(r.status !== 204) throw new Error(ghErrorText(r.status));
+    const recent = t0 - store.get("dispatchAt", 0) <= (auto ? GAP.auto : GAP.manual);
+    if(recent && auto){ rateNote(""); return; }   // já pediu há pouco; o botão continua disponível
+    if(!recent){
+      const r = await gh("/actions/workflows/" + GH.workflow + "/dispatches", "POST", { ref: "main" });
+      if(r.status !== 204) throw new Error(ghErrorText(r.status));
+      store.set("dispatchAt", t0);
+    }
     rateNote("Buscando a cotação de hoje… leva cerca de 1 min");
     for(let n = 1; Date.now() - t0 < TIMING.limit; n++){
       await sleep(TIMING.poll);
@@ -664,7 +673,9 @@ $("testGh").onclick = async () => {
     else { st.className = "help bad"; st.textContent = ghErrorText(r.status); }
   }catch(e){ st.className = "help bad"; st.textContent = "Sem conexão com o GitHub agora."; }
 };
-$("refresh").onclick = refreshRates;
+$("refresh").onclick = () => updateRates(false);
+// Voltar ao app depois de um tempo (ele pode ter ficado aberto em segundo plano desde ontem) também confere a cotação.
+document.addEventListener("visibilitychange", () => { if(!document.hidden && Date.now() - lastCheck > 5 * 60e3) updateRates(true); });
 $("model").oninput = e => { S.model = e.target.value.trim() || DEFAULTS.model; save(); };
 document.querySelectorAll('[name=arsMode]').forEach(r => r.onchange = () => { S.arsMode = r.value; save(); renderRates(); });
 document.querySelectorAll('[name=brlMode]').forEach(r => r.onchange = () => { S.brlMode = r.value; save(); renderRates(); });
@@ -708,10 +719,10 @@ $("closeManual").onclick = () => $("manual").close();
 $("manualIn").oninput = renderManual;
 
 /* ---------- Início ---------- */
-window.QE = { TIMING, refreshRates, get note(){ return note; }, parseNum, convert, cropRect, parseToolResult, arsPerUsd, brlPerUsd, S, R, renderRates, renderResults, setResults:(p, n) => { lastPrices = p; lastNote = n; setState("result"); renderResults(); } };
+window.QE = { TIMING, refreshRates: () => updateRates(false), updateRates, get note(){ return note; }, parseNum, convert, cropRect, parseToolResult, arsPerUsd, brlPerUsd, S, R, renderRates, renderResults, setResults:(p, n) => { lastPrices = p; lastNote = n; setState("result"); renderResults(); } };
 applyFrame();
 renderRates();
-loadRates();
+updateRates(true);
 startCamera();
 if(!S.apiKey) setTimeout(() => openSettings(true), 400);
 if("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(() => {});
