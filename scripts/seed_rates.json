@@ -1,14 +1,14 @@
 {
-  "updated": "2026-11-24T00:48:59+00:00",
+  "updated": "2026-11-25T22:29:33+00:00",
   "visa": {
-    "arsPerUsd": 1594.358,
-    "date": "2026-11-24",
-    "fetched": "2026-11-24T00:48:59+00:00",
-    "source": "visa (www.visa.com.br)"
+    "arsPerUsd": 1584.11,
+    "date": "2026-11-25",
+    "fetched": "2026-11-25T22:29:33+00:00",
+    "source": "visa (usa.visa.com)"
   },
   "brl": {
-    "commercial": 5.9585,
-    "time": "2026-11-24T00:02:31+00:00",
+    "commercial": 5.8944,
+    "time": "2026-11-25T00:02:31+00:00",
     "source": "er-api"
   }
 }
