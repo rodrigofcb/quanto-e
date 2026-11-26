@@ -3,17 +3,12 @@ name: Publicar app e cotações
 on:
   push:
     branches: [main]
-  schedule:
-    # O GitHub tem atrasado as execuções agendadas de 3 a 5 horas, então elas são pedidas de madrugada
-    # (00:13, 06:13 e 10:13 em Buenos Aires) para a cotação nova chegar antes do dia começar.
-    # O botão de atualizar do app dispara este mesmo workflow na hora (workflow_dispatch).
-    - cron: "13 3 * * *"
-    - cron: "13 9 * * *"
-    - cron: "13 13 * * *"
+  # Sem agendamento: a cotação é buscada sob demanda, quando o app abre com a cotação de outro dia
+  # ou quando o botão de atualizar é tocado (o app dispara este workflow pela API do GitHub).
   workflow_dispatch:
 
 permissions:
-  contents: write  # para guardar a cotação nova no repositório (ver o último passo)
+  contents: read
   pages: write
   id-token: write
 
@@ -51,24 +46,3 @@ jobs:
 
       - id: deployment
         uses: actions/deploy-pages@v4
-
-      # Guarda a cotação do dia no repositório quando a data da Visa avança. Serve de reserva se a
-      # Visa falhar e, por gerar atividade no repositório, impede o GitHub de desligar o agendamento
-      # (ele desliga em repositórios públicos sem atividade por 60 dias).
-      - name: Guardar a cotação do dia no repositório
-        if: github.event_name != 'push'
-        run: |
-          python3 - <<'PY'
-          import json
-          new = json.load(open("_site/rates.json", encoding="utf-8"))
-          seed = json.load(open("scripts/seed_rates.json", encoding="utf-8"))
-          if new.get("visa") and new["visa"].get("date", "") > (seed.get("visa") or {}).get("date", ""):
-              with open("scripts/seed_rates.json", "w", encoding="utf-8") as f:
-                  json.dump(new, f, ensure_ascii=False, indent=2)
-          PY
-          if ! git diff --quiet scripts/seed_rates.json; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git commit -q -m "Cotação Visa de $(python3 -c 'import json;print(json.load(open("_site/rates.json"))["visa"]["date"])')" scripts/seed_rates.json
-            git push -q
-          fi
